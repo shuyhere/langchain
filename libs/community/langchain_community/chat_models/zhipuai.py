@@ -53,8 +53,9 @@ class ChatZhipuAI(BaseChatModel):
     zhipuai: Any
     zhipuai_api_key: Optional[str] = Field(default=None, alias="api_key")
     """Automatically inferred from env var `ZHIPUAI_API_KEY` if not provided."""
+    zhipu_client: Any = Field(default=None, alias="client")
 
-    model: str = Field("chatglm_turbo")
+    model: str = Field("glm-4")
     """
     Model name to use.
     -chatglm_turbo:
@@ -67,7 +68,13 @@ class ChatZhipuAI(BaseChatModel):
         dialogues or game scenes such as emotional accompaniments, game intelligent 
         NPCS, Internet celebrities/stars/movie and TV series IP clones, digital 
         people/virtual anchors, and text adventure games.
+    -glm-4:
+        It can be used to generate text in a variety of styles, including 
+        news, novels, poems, and so on.It is recommended to use SSE or asynchronous call 
+        request interface
+        
     """
+    
 
     temperature: float = Field(0.95)
     """
@@ -166,8 +173,7 @@ class ChatZhipuAI(BaseChatModel):
         try:
             import zhipuai
 
-            self.zhipuai = zhipuai
-            self.zhipuai.api_key = self.zhipuai_api_key
+            self.zhipu_client = zhipuai.ZhipuAI(api_key='your_api_key_here')
         except ImportError:
             raise RuntimeError(
                 "Could not import zhipuai package. "
@@ -175,8 +181,8 @@ class ChatZhipuAI(BaseChatModel):
             )
 
     def invoke(self, prompt):
-        if self.model == "chatglm_turbo":
-            return self.zhipuai.model_api.invoke(
+        if self.model == "chatglm_turbo" or self.model =="glm-4":
+            return self.zhipu_client.Completions(
                 model=self.model,
                 prompt=prompt,
                 top_p=self.top_p,
@@ -186,7 +192,7 @@ class ChatZhipuAI(BaseChatModel):
             )
         elif self.model == "characterglm":
             meta = self.meta.dict()
-            return self.zhipuai.model_api.invoke(
+            return self.zhipu_client.chat.Chat.completions(
                 model=self.model,
                 meta=meta,
                 prompt=prompt,
@@ -197,7 +203,7 @@ class ChatZhipuAI(BaseChatModel):
 
     def sse_invoke(self, prompt):
         if self.model == "chatglm_turbo":
-            return self.zhipuai.model_api.sse_invoke(
+            return self.zhipu_client.completions(
                 model=self.model,
                 prompt=prompt,
                 top_p=self.top_p,
@@ -205,23 +211,25 @@ class ChatZhipuAI(BaseChatModel):
                 request_id=self.request_id,
                 return_type=self.return_type,
                 incremental=self.incremental,
+                Streaming=True
             )
         elif self.model == "characterglm":
             meta = self.meta.dict()
-            return self.zhipuai.model_api.sse_invoke(
+            return self.zhipu_client.chat.Chat.completions(
                 model=self.model,
                 prompt=prompt,
                 meta=meta,
                 request_id=self.request_id,
                 return_type=self.return_type,
                 incremental=self.incremental,
+                Streaming=True
             )
         return None
 
     async def async_invoke(self, prompt):
         loop = asyncio.get_running_loop()
         partial_func = partial(
-            self.zhipuai.model_api.async_invoke, model=self.model, prompt=prompt
+            self.zhipu_client.chat.Chat.asyncCompletions, model=self.model, prompt=prompt
         )
         response = await loop.run_in_executor(
             None,
@@ -233,7 +241,7 @@ class ChatZhipuAI(BaseChatModel):
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(
             None,
-            self.zhipuai.model_api.query_async_invoke_result,
+            self.zhipu_client.chat.Chat.asyncCompletions,
             task_id,
         )
         return response
